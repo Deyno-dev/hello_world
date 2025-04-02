@@ -1,0 +1,30 @@
+# Core dependencies for train_trend.py and features.py
+pandas>=2.2.2          # Data handling and CSV loading
+numpy>=1.26.4          # Numerical operations
+xgboost>=2.1.1         # Trend model (XGBoost classifier)
+ta>=0.11.0             # Technical indicators in features.py
+
+# Machine learning and evaluation (enhanced train_trend.py)
+scikit-learn>=1.5.1    # Train-test split, GridSearchCV, accuracy_score
+
+# Logging and utilities
+pathlib>=1.0.1         # Cross-platform path handling (built-in, but listed for clarity)
+
+# Potential extensions for other models
+tensorflow>=2.17.0     # For LSTM (volatility model) if added later
+stable-baselines3>=2.3.2  # For DQN (execution model) if added later
+gym>=0.26.2            # Environment for reinforcement learning
+
+# FreqTrade compatibility (for strategies and backtesting)
+freqtrade>=2024.10.0   # FreqTrade framework (latest stable as of Oct 2025)
+ccxt>=4.3.0            # Exchange API access (used by FreqTrade)
+technical>=0.1.7       # Additional TA indicators for FreqTrade
+requests>=2.32.3       # HTTP requests (FreqTrade dependency)
+
+# Optional: Visualization and progress
+matplotlib>=3.9.2      # Plotting results (e.g., feature importance)
+seaborn>=0.13.2        # Enhanced plotting
+tqdm>=4.66.5           # Progress bars for tuning or long runs
+
+# Development tools (optional)
+pip>=24.2              # Ensure latest pip
