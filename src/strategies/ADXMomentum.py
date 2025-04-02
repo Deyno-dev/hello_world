@@ -6,17 +6,7 @@ import talib.abstract as ta
 
 # --------------------------------
 
-
 class ADXMomentum(IStrategy):
-    """
-
-    author@: Gert Wohlgemuth
-
-    converted from:
-
-        https://github.com/sthewissen/Mynt/blob/master/src/Mynt.Core/Strategies/AdxMomentum.cs
-
-    """
 
     INTERFACE_VERSION: int = 3
     # Minimal ROI designed for the strategy.
