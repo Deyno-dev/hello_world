@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Multi-AI Trading Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        .tab { display: inline-block; padding: 10px; cursor: pointer; }
+        .tab-content { display: none; }
+        .active { display: block; }
+    </style>
+</head>
+<body>
+    <h1>Multi-AI Trading Dashboard</h1>
+    <div id="tabs"></div>
+    <div id="trend" class="tab-content">
+        <h2>Trend Model</h2>
+        <div id="trend_status">Status: Waiting...</div>
+        <div id="trend_plot" style="width: 80%; height: 400px;"></div>
+        <div id="trend_metrics"></div>
+    </div>
+    <div id="volatility" class="tab-content">
+        <h2>Volatility Model</h2>
+        <div id="volatility_status">Status: Waiting...</div>
+        <div id="volatility_plot" style="width: 80%; height: 400px;"></div>
+        <div id="volatility_metrics"></div>
+    </div>
+    <div id="regime" class="tab-content">
+        <h2>Regime Model</h2>
+        <div id="regime_status">Status: Waiting...</div>
+        <div id="regime_plot" style="width: 80%; height: 400px;"></div>
+        <div id="regime_metrics"></div>
+    </div>
+    <div id="execution" class="tab-content">
+        <h2>Execution Model</h2>
+        <div id="execution_status">Status: Waiting...</div>
+        <div id="execution_plot" style="width: 80%; height: 400px;"></div>
+        <div id="execution_metrics"></div>
+    </div>
+    <div id="ensemble" class="tab-content">
+        <h2>Ensemble Model</h2>
+        <div id="ensemble_status">Status: Waiting...</div>
+        <div id="ensemble_plot" style="width: 80%; height: 400px;"></div>
+        <div id="ensemble_metrics"></div>
+    </div>
+    <div id="backtrade" class="tab-content">
+        <h2>Backtest Results</h2>
+        <div id="backtrade_status">Status: Waiting...</div>
+        <div id="backtrade_plot" style="width: 80%; height: 400px;"></div>
+        <div id="backtrade_metrics"></div>
+    </div>
+
+    <script>
+        var socket = io.connect('http://localhost:5000');
+        var models = {};
+
+        socket.on('init', function(data) {
+            var tabs = document.getElementById('tabs');
+            data.models.forEach(function(model) {
+                models[model] = { losses: [], val_losses: [] };
+                var tab = document.createElement('div');
+                tab.className = 'tab';
+                tab.innerText = model.charAt(0).toUpperCase() + model.slice(1);
+                tab.onclick = function() {
+                    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+                    document.getElementById(model).classList.add('active');
+                };
+                tabs.appendChild(tab);
+            });
+            document.getElementById(data.models[0]).classList.add('active');
+        });
+
+        socket.on('connect', function() {
+            Object.keys(models).forEach(m => {
+                document.getElementById(m + '_status').innerText = 'Status: Connected';
+            });
+        });
+
+        socket.on('update', function(data) {
+            var m = data.model;
+            models[m].losses.push(data.loss);
+            models[m].val_losses.push(data.val_loss);
+            Plotly.newPlot(m + '_plot', [
+                {y: models[m].losses, type: 'scatter', name: 'Return (Placeholder)'},
+                {y: models[m].val_losses, type: 'scatter', name: 'Volatility (Placeholder)'}
+            ], {title: m.charAt(0).toUpperCase() + m.slice(1) + ' Progress', xaxis: {title: 'Step'}, yaxis: {title: 'Value'}});
+            document.getElementById(m + '_status').innerText = 'Status: Running - Step ' + data.epoch;
+        });
+
+        socket.on('complete', function(data) {
+            var m = data.model;
+            document.getElementById(m + '_metrics').innerText = 'Metrics: ' + JSON.stringify(data.metrics);
+            document.getElementById(m + '_status').innerText = 'Status: Completed';
+        });
+
+        socket.on('error', function(data) {
+            var m = data.model;
+            document.getElementById(m + '_status').innerText = 'Status: Error - ' + data.message;
+        });
+    </script>
+</body>
+</html>
