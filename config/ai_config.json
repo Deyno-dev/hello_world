@@ -1,6 +1,23 @@
 {
-    "trend": {"max_depth": 6, "learning_rate": 0.1},
-    "volatility": {"lstm_units": 50, "epochs": 10},
-    "regime": {"n_estimators": 100},
-    "execution": {"timesteps": 10000}
+    "trend": {
+        "test_size": 0.2,
+        "random_state": 42
+    },
+    "volatility": {
+        "seq_length": 20,
+        "epochs": 50,
+        "batch_size": 32,
+        "patience": 5
+    },
+    "regime": {
+        "test_size": 0.2,
+        "random_state": 42
+    },
+    "execution": {
+        "total_timesteps": 10000
+    },
+    "ensemble": {
+        "test_size": 0.2,
+        "random_state": 42
+    }
 }
