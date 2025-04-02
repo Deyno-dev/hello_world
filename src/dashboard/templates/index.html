@@ -80,10 +80,12 @@
             var m = data.model;
             models[m].losses.push(data.loss);
             models[m].val_losses.push(data.val_loss);
+            var title = m === 'backtrade' ? 'Equity Curve' : 'Training Progress';
+            var yTitle = m === 'backtrade' ? 'Portfolio Value' : 'Loss';
             Plotly.newPlot(m + '_plot', [
-                {y: models[m].losses, type: 'scatter', name: 'Return (Placeholder)'},
-                {y: models[m].val_losses, type: 'scatter', name: 'Volatility (Placeholder)'}
-            ], {title: m.charAt(0).toUpperCase() + m.slice(1) + ' Progress', xaxis: {title: 'Step'}, yaxis: {title: 'Value'}});
+                {y: models[m].losses, type: 'scatter', name: m === 'backtrade' ? 'Equity' : 'Training Loss'},
+                {y: models[m].val_losses, type: 'scatter', name: m === 'backtrade' ? 'Volatility' : 'Validation Loss'}
+            ], {title: m.charAt(0).toUpperCase() + m.slice(1) + ' ' + title, xaxis: {title: 'Step'}, yaxis: {title: yTitle}});
             document.getElementById(m + '_status').innerText = 'Status: Running - Step ' + data.epoch;
         });
 
