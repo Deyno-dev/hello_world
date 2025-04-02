@@ -7,12 +7,10 @@
 # --- Do not remove these libs ---
 import logging
 from freqtrade.strategy import CategoricalParameter, DecimalParameter
-
 from numpy.lib import math
 from freqtrade.strategy import IStrategy
 from pandas import DataFrame
 # --------------------------------
-
 # Add your lib to import here
 # import talib.abstract as ta
 import pandas as pd
