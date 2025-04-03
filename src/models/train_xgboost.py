@@ -30,7 +30,7 @@ TARGET_COLUMNS = config["target_columns"]
 os.makedirs(MODEL_PATH, exist_ok=True)
 
 # ✅ Telegram Bot Configuration
-TELEGRAM_BOT_TOKEN = ""  # Replace with your bot token
+TELEGRAM_BOT_TOKEN = "8069506330:AAFCOeDXulQG9yeRB9yHsWFLrlluWNHqfzw"  # Replace with your bot token
 TELEGRAM_CHAT_ID = "-1002220357189"  # Replace with your chat ID
 
 # Initialize Telegram Bot

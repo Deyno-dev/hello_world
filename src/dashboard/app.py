@@ -14,6 +14,8 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 logging.basicConfig(filename=LOG_DIR / 'dashboard.log', level=logging.INFO)
 
+training_data = {'trend': [], 'volatility': [], 'regime': [], 'execution': [], 'ensemble': []}
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -21,7 +23,7 @@ def index():
 @sio.event
 def connect(sid, environ):
     logging.info("Client connected: %s", sid)
-    sio.emit('init', {'models': ['trend', 'volatility', 'regime', 'execution', 'ensemble', 'backtrade']}, room=sid)
+    sio.emit('init', {'models': ['trend', 'volatility', 'regime', 'execution', 'ensemble']}, room=sid)
 
 @sio.event
 def disconnect(sid):
@@ -29,15 +31,27 @@ def disconnect(sid):
 
 @sio.event
 def training_update(sid, data):
+    model = data['model']
+    training_data[model].append({'epoch': data['epoch'], 'loss': data['loss'], 'val_loss': data['val_loss']})
+    # Only emit if requested
     sio.emit('update', data, room=sid)
 
 @sio.event
-def training_complete(sid, data):
-    sio.emit('complete', data, room=sid)
+def start_training(sid, data):
+    action = data['action']
+    if action == 'auto_train':
+        logging.info("Auto training triggered from controller")
+    else:
+        model = action.split('_')[1]
+        logging.info(f"Training {model} triggered from controller")
 
 @sio.event
-def error(sid, data):
-    sio.emit('error', data, room=sid)
+def get_training_data(sid, data):
+    model = data.get('model', 'all')
+    if model == 'all':
+        sio.emit('training_data', training_data, room=sid)
+    else:
+        sio.emit('training_data', {model: training_data[model]}, room=sid)
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000, debug=True)

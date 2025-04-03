@@ -15,39 +15,38 @@
     <div id="tabs"></div>
     <div id="trend" class="tab-content">
         <h2>Trend Model</h2>
+        <button onclick="refreshData('trend')">Refresh Training Data</button>
         <div id="trend_status">Status: Waiting...</div>
         <div id="trend_plot" style="width: 80%; height: 400px;"></div>
         <div id="trend_metrics"></div>
     </div>
     <div id="volatility" class="tab-content">
         <h2>Volatility Model</h2>
+        <button onclick="refreshData('volatility')">Refresh Training Data</button>
         <div id="volatility_status">Status: Waiting...</div>
         <div id="volatility_plot" style="width: 80%; height: 400px;"></div>
         <div id="volatility_metrics"></div>
     </div>
     <div id="regime" class="tab-content">
         <h2>Regime Model</h2>
+        <button onclick="refreshData('regime')">Refresh Training Data</button>
         <div id="regime_status">Status: Waiting...</div>
         <div id="regime_plot" style="width: 80%; height: 400px;"></div>
         <div id="regime_metrics"></div>
     </div>
     <div id="execution" class="tab-content">
         <h2>Execution Model</h2>
+        <button onclick="refreshData('execution')">Refresh Training Data</button>
         <div id="execution_status">Status: Waiting...</div>
         <div id="execution_plot" style="width: 80%; height: 400px;"></div>
         <div id="execution_metrics"></div>
     </div>
     <div id="ensemble" class="tab-content">
         <h2>Ensemble Model</h2>
+        <button onclick="refreshData('ensemble')">Refresh Training Data</button>
         <div id="ensemble_status">Status: Waiting...</div>
         <div id="ensemble_plot" style="width: 80%; height: 400px;"></div>
         <div id="ensemble_metrics"></div>
-    </div>
-    <div id="backtrade" class="tab-content">
-        <h2>Backtest Results</h2>
-        <div id="backtrade_status">Status: Waiting...</div>
-        <div id="backtrade_plot" style="width: 80%; height: 400px;"></div>
-        <div id="backtrade_metrics"></div>
     </div>
 
     <script>
@@ -80,25 +79,26 @@
             var m = data.model;
             models[m].losses.push(data.loss);
             models[m].val_losses.push(data.val_loss);
-            var title = m === 'backtrade' ? 'Equity Curve' : 'Training Progress';
-            var yTitle = m === 'backtrade' ? 'Portfolio Value' : 'Loss';
-            Plotly.newPlot(m + '_plot', [
-                {y: models[m].losses, type: 'scatter', name: m === 'backtrade' ? 'Equity' : 'Training Loss'},
-                {y: models[m].val_losses, type: 'scatter', name: m === 'backtrade' ? 'Volatility' : 'Validation Loss'}
-            ], {title: m.charAt(0).toUpperCase() + m.slice(1) + ' ' + title, xaxis: {title: 'Step'}, yaxis: {title: yTitle}});
             document.getElementById(m + '_status').innerText = 'Status: Running - Step ' + data.epoch;
         });
 
-        socket.on('complete', function(data) {
-            var m = data.model;
-            document.getElementById(m + '_metrics').innerText = 'Metrics: ' + JSON.stringify(data.metrics);
-            document.getElementById(m + '_status').innerText = 'Status: Completed';
+        socket.on('training_data', function(data) {
+            for (var m in data) {
+                if (data[m].length) {
+                    var losses = data[m].map(d => d.loss);
+                    var val_losses = data[m].map(d => d.val_loss);
+                    Plotly.newPlot(m + '_plot', [
+                        {y: losses, type: 'scatter', name: 'Training Loss'},
+                        {y: val_losses, type: 'scatter', name: 'Validation Loss'}
+                    ], {title: m.charAt(0).toUpperCase() + m.slice(1) + ' Training Progress', xaxis: {title: 'Epoch'}, yaxis: {title: 'Loss'}});
+                    document.getElementById(m + '_status').innerText = 'Status: Data Loaded - Last Step ' + data[m][data[m].length-1].epoch;
+                }
+            }
         });
 
-        socket.on('error', function(data) {
-            var m = data.model;
-            document.getElementById(m + '_status').innerText = 'Status: Error - ' + data.message;
-        });
+        function refreshData(model) {
+            socket.emit('get_training_data', {'model': model});
+        }
     </script>
 </body>
 </html>

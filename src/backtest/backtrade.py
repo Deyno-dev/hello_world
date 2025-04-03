@@ -15,7 +15,6 @@ import socketio
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-# Define project root
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 LOG_DIR = PROJECT_ROOT / 'results' / 'logs'
 BACKTEST_DIR = PROJECT_ROOT / 'results' / 'backtest'
@@ -23,14 +22,9 @@ PLOT_DIR = PROJECT_ROOT / 'results' / 'plots'
 for d in [LOG_DIR, BACKTEST_DIR, PLOT_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
-# Setup logging
-logging.basicConfig(
-    filename=LOG_DIR / 'backtrade.log',
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(filename=LOG_DIR / 'backtrade.log', level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 
-# SocketIO for dashboard
 sio = socketio.Client()
 
 
@@ -45,14 +39,19 @@ def load_models():
     return trend_model, volatility_model, regime_model, execution_model, ensemble_model, scaler
 
 
-def calculate_metrics(returns):
-    annualized_return = ((1 + returns.mean()) ** 252 - 1) * 100  # Adjust for 1-min data if needed
-    sharpe_ratio = (returns.mean() / returns.std()) * np.sqrt(252) if returns.std() != 0 else 0
+def calculate_metrics(trades_df, equity):
+    returns = pd.Series([t['balance'] / equity[i - 1] - 1 for i, t in trades_df.iterrows() if i > 0])
+    ann_return = ((1 + returns.mean()) ** 252 - 1) * 100 if returns.mean() else 0
+    sharpe = (returns.mean() / returns.std()) * np.sqrt(252) if returns.std() != 0 else 0
     cum_returns = (1 + returns).cumprod()
     peak = cum_returns.cummax()
     drawdown = (cum_returns - peak) / peak
-    max_drawdown = drawdown.min() * 100
-    return annualized_return, sharpe_ratio, max_drawdown
+    max_dd = drawdown.min() * 100
+    wins = trades_df[trades_df['profit'] > 0]['profit'].sum()
+    losses = abs(trades_df[trades_df['profit'] < 0]['profit'].sum())
+    win_rate = len(trades_df[trades_df['profit'] > 0]) / len(trades_df) if len(trades_df) > 0 else 0
+    profit_factor = wins / losses if losses > 0 else float('inf')
+    return ann_return, sharpe, max_dd, win_rate, profit_factor
 
 
 def backtrade(data_path, seq_length=20, initial_balance=10000, fee=0.001, sl=0.02, tp=0.05):
@@ -63,16 +62,13 @@ def backtrade(data_path, seq_length=20, initial_balance=10000, fee=0.001, sl=0.0
         sio.connect('http://localhost:5000')
         logging.info("Connected to dashboard")
 
-        logging.info("Loading data from %s", data_path)
         df = pd.read_csv(data_path, parse_dates=['timestamp'], index_col='timestamp')
         df = calculate_features(df)
-
-        features = ['rsi', 'ema_fast', 'ema_slow', 'macd', 'supertrend',
-                    'volatility', 'adx', 'bb_upper', 'bb_lower', 'cci']
+        features = ['rsi', 'ema_fast', 'ema_slow', 'macd', 'supertrend', 'volatility', 'adx', 'bb_upper', 'bb_lower',
+                    'cci']
         df = df[features + ['close']].dropna()
 
         trend_model, volatility_model, regime_model, execution_model, ensemble_model, scaler = load_models()
-
         vol_data = scaler.transform(df[features])
         X_vol = np.array([vol_data[i - seq_length:i] for i in range(seq_length, len(vol_data))])
         df = df.iloc[seq_length:]
@@ -87,19 +83,16 @@ def backtrade(data_path, seq_length=20, initial_balance=10000, fee=0.001, sl=0.0
         results = {}
 
         for model_name, model in tqdm(models.items(), desc="Backtesting models"):
-            logging.info("Backtesting %s", model_name)
             balance = initial_balance
             position = 0
             entry_price = 0
             trades = []
             equity = [balance]
-            returns = []
 
             for i in tqdm(range(len(df)), desc=f"Simulating {model_name} trades"):
                 row = df.iloc[i]
                 price = row['close']
 
-                # Generate prediction
                 if model_name == 'trend':
                     pred = model.predict(xgb.DMatrix([row[features]]))[0]
                 elif model_name == 'volatility':
@@ -113,7 +106,7 @@ def backtrade(data_path, seq_length=20, initial_balance=10000, fee=0.001, sl=0.0
                     env.envs[0].current_step = i
                     action, _ = model.predict(obs)
                     pred = action[0] % 2
-                    else:  # ensemble
+                    else:
                     trend_pred = trend_model.predict(xgb.DMatrix([row[features]]))[0]
                     vol_pred = volatility_model.predict(X_vol[i].reshape(1, seq_length, len(features)), verbose=0)[0, 0]
                     regime_pred = regime_model.predict([row[features]])[0]
@@ -121,63 +114,66 @@ def backtrade(data_path, seq_length=20, initial_balance=10000, fee=0.001, sl=0.0
                     stack = np.array([[trend_pred, vol_pred, regime_pred, exec_pred]])
                     pred = model.predict(stack)[0]
 
-                    # Trading logic with SL/TP
                     if position > 0:
                         if
                     price <= entry_price * (1 - sl) or price >= entry_price * (1 + tp):
+                    profit = position * (price - entry_price) - fee * position * price
                     balance += position * price * (1 - fee)
-                    trades.append({'time': df.index[i], 'action': 'sell', 'price': price, 'balance': balance})
-                    returns.append((price - entry_price) / entry_price - fee)
+                    trades.append(
+                        {'time': df.index[i], 'action': 'sell', 'price': price, 'balance': balance, 'profit': profit})
                     position = 0
 
                     if pred == 1 and balance >= price and position == 0:
-                        position = balance * 0.1 / price  # 10% position sizing
+                        position = balance * 0.1 / price
                     balance -= position * price * (1 + fee)
                     entry_price = price
-                    trades.append({'time': df.index[i], 'action': 'buy', 'price': price, 'balance': balance})
+                    trades.append(
+                        {'time': df.index[i], 'action': 'buy', 'price': price, 'balance': balance, 'profit': 0})
 
                     equity.append(balance + position * price)
 
-                    # Dashboard update every 1000 steps
                     if i % 1000 == 0 and i > 0:
                         sio.emit('training_update', {
                             'model': model_name,
                             'epoch': i // 1000 + 1,
-                            'loss': float(np.mean(equity[-1000:])),  # Equity as "loss"
-                            'val_loss': float(np.std(returns[-1000:]) if returns else 0)  # Volatility as "val_loss"
+                            'loss': float(np.mean(equity[-1000:])),
+                            'val_loss': float(np.std(equity[-1000:]) if len(equity) > 1000 else 0)
                         })
 
-                    # Finalize
                     if position > 0:
-                        balance += position * df['close'].iloc[-1] * (1 - fee)
+                        profit = position * (df['close'].iloc[-1] - entry_price) - fee * position * df['close'].iloc[-1]
+                    balance += position * df['close'].iloc[-1] * (1 - fee)
                     trades.append(
-                        {'time': df.index[-1], 'action': 'sell', 'price': df['close'].iloc[-1], 'balance': balance})
-                    position = 0
+                        {'time': df.index[-1], 'action': 'sell', 'price': df['close'].iloc[-1], 'balance': balance,
+                         'profit': profit})
 
-                    # Metrics
-                    returns = pd.Series(returns)
-                    ann_return, sharpe, max_dd = calculate_metrics(returns)
+                    trades_df = pd.DataFrame(trades)
+                    ann_return, sharpe, max_dd, win_rate, profit_factor = calculate_metrics(trades_df, equity)
                     final_balance = balance
                     results[model_name] = {
                 'final_balance': final_balance,
                 'annualized_return': ann_return,
                 'sharpe_ratio': sharpe,
-                'max_drawdown': max_dd
+                'max_drawdown': max_dd,
+                'win_rate': win_rate,
+                'profit_factor': profit_factor
             }
-            logging.info("%s - Final Balance: %.2f, Ann Return: %.2f%%, Sharpe: %.2f, Max DD: %.2f%%",
-            model_name, final_balance, ann_return, sharpe, max_dd)
+            logging.info(
+                "%s - Final Balance: %.2f, Ann Return: %.2f%%, Sharpe: %.2f, Max DD: %.2f%%, Win Rate: %.2f, Profit Factor: %.2f",
+            model_name, final_balance, ann_return, sharpe, max_dd, win_rate, profit_factor)
             sio.emit('training_complete', {
                 'model': model_name,
                 'metrics': {
                     'final_balance': float(final_balance),
                     'annualized_return': float(ann_return),
                     'sharpe_ratio': float(sharpe),
-                    'max_drawdown': float(max_dd)
+                    'max_drawdown': float(max_dd),
+                    'win_rate': float(win_rate),
+                    'profit_factor': float(profit_factor)
                 }
             })
 
-            # Save trades and equity curve
-            pd.DataFrame(trades).to_csv(BACKTEST_DIR / f'{model_name}_trades.csv', index=False)
+            trades_df.to_csv(BACKTEST_DIR / f'{model_name}_trades.csv', index=False)
             plt.figure(figsize=(12, 6))
             plt.plot(df.index[1:], equity[1:], label=f'{model_name} Equity')
             plt.title(f'{model_name} Equity Curve')
@@ -185,9 +181,6 @@ def backtrade(data_path, seq_length=20, initial_balance=10000, fee=0.001, sl=0.0
             plt.ylabel('Portfolio Value')
             plt.legend()
             plt.savefig(PLOT_DIR / f'{model_name}_equity_curve.png')
-            logging.info("Trades saved to %s, Equity curve to %s",
-            BACKTEST_DIR / f'{model_name}_trades.csv',
-            PLOT_DIR / f'{model_name}_equity_curve.png')
 
             sio.disconnect()
     return results
